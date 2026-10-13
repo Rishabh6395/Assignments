@@ -1,0 +1,40 @@
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Express Backend Web Service
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: preplab-cv-backend
+    runtime: node
+    plan: free
+    rootDir: PrepLab CV Parser/backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # 2. Next.js Frontend Web Service
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: preplab-cv-frontend
+    runtime: node
+    plan: free
+    rootDir: PrepLab CV Parser/frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: preplab-cv-backend
+          property: url
+          format: ${url}/api

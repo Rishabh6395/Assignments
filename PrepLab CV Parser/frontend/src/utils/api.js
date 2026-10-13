@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL
+  ? process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '')
+  : (typeof window !== 'undefined' ? '/backend-api' : 'http://localhost:5000/api');
 
 /**
  * Retrieves API key & provider settings from localStorage if stored
