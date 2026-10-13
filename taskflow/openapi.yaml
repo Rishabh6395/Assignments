@@ -1,0 +1,463 @@
+openapi: 3.0.3
+info:
+  title: TaskFlow API
+  version: '1.0.0'
+  description: Project management API.
+servers:
+  - url: http://localhost:3000
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    OrgIdHeader:
+      name: X-Org-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        code: { type: string }
+        details: { type: object }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [todo, in_progress, review, done] }
+        priority: { type: string, enum: [low, medium, high, urgent] }
+        dueDate: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Project:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        orgId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      security: []
+      summary: Health check
+      responses:
+        '200': { description: OK }
+
+  /auth/register:
+    post:
+      security: []
+      summary: Register a new user and create their organization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name, organizationName]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                name: { type: string }
+                organizationName: { type: string }
+      responses:
+        '201': { description: Created }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Email already registered, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /auth/login:
+    post:
+      security: []
+      summary: Log in and receive access + refresh tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /auth/refresh:
+    post:
+      security: []
+      summary: Exchange a valid refresh token for a new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: Invalid/expired refresh token }
+
+  /auth/logout:
+    post:
+      security: []
+      summary: Revoke a refresh token (optionally all devices)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+                allDevices: { type: boolean, default: false }
+      responses:
+        '204': { description: No Content }
+
+  /organizations/members:
+    get:
+      summary: List members of the current organization
+      parameters: [{ $ref: '#/components/parameters/OrgIdHeader' }]
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Add an existing user to the organization (org_admin only)
+      parameters: [{ $ref: '#/components/parameters/OrgIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [org_admin, member], default: member }
+      responses:
+        '201': { description: Created }
+        '403': { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /organizations/members/{userId}:
+    delete:
+      summary: Remove a member from the organization (org_admin only)
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: No Content }
+
+  /projects:
+    get:
+      summary: List projects in the current organization
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Project' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      summary: Create a project
+      parameters: [{ $ref: '#/components/parameters/OrgIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /projects/{id}:
+    get:
+      summary: Get a project by id
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      summary: Update a project
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete a project (org_admin only)
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: No Content }
+        '403': { description: Forbidden }
+
+  /projects/{id}/dashboard:
+    get:
+      summary: Task counts grouped by status for a project
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+
+  /tasks:
+    get:
+      summary: List tasks with optional filters
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: projectId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [todo, in_progress, review, done] }
+        - name: priority
+          in: query
+          schema: { type: string, enum: [low, medium, high, urgent] }
+        - name: assignee
+          in: query
+          schema: { type: string, format: uuid }
+        - name: dueDateFrom
+          in: query
+          schema: { type: string, format: date-time }
+        - name: dueDateTo
+          in: query
+          schema: { type: string, format: date-time }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Task' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      summary: Create a task
+      parameters: [{ $ref: '#/components/parameters/OrgIdHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, title]
+              properties:
+                projectId: { type: string, format: uuid }
+                title: { type: string }
+                description: { type: string }
+                status: { type: string, enum: [todo, in_progress, review, done] }
+                priority: { type: string, enum: [low, medium, high, urgent] }
+                dueDate: { type: string, format: date-time }
+      responses:
+        '201': { description: Created }
+
+  /tasks/{id}:
+    get:
+      summary: Get a task by id
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      summary: Update a task
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                status: { type: string, enum: [todo, in_progress, review, done] }
+                priority: { type: string, enum: [low, medium, high, urgent] }
+                dueDate: { type: string, format: date-time, nullable: true }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete a task
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: No Content }
+
+  /tasks/{id}/assign:
+    post:
+      summary: Assign a user to a task (triggers async email notification)
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string, format: uuid }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, properties: { assignment: { type: object }, jobId: { type: string } } } } } }
+        '400': { description: Assignee not in org, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /tasks/{id}/assign/{userId}:
+    delete:
+      summary: Unassign a user from a task
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: No Content }
+
+  /tasks/{taskId}/comments:
+    get:
+      summary: List comments on a task
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Add a comment to a task
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+      responses:
+        '201': { description: Created }
+
+  /jobs/{id}:
+    get:
+      summary: Get the status of a background job (e.g. an email notification job)
+      parameters:
+        - { $ref: '#/components/parameters/OrgIdHeader' }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string, enum: [pending, active, completed, failed] }
+                  attemptsMade: { type: integer }
+                  maxAttempts: { type: integer }
+                  failedReason: { type: string, nullable: true }
+                  data: { type: object }
+                  createdAt: { type: string, format: date-time }
+                  finishedAt: { type: string, format: date-time, nullable: true }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
