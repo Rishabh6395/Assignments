@@ -10,6 +10,8 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      - key: PORT
+        value: 5000
       - key: NODE_VERSION
         value: 20.18.0
       - key: GEMINI_API_KEY
@@ -33,8 +35,4 @@ services:
       - key: NODE_VERSION
         value: 20.18.0
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: preplab-cv-backend
-          property: url
-          format: ${url}/api
+        sync: false
